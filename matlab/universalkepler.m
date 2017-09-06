@@ -20,7 +20,8 @@ alpha=1/a;
 % rp=a-a*e;
 % x0=MU*(t-t0)^2/( rp*  )
 % keyboard
-opt=optimset('TolX',1e-12,'TolFun',1e-12);
+% opt=optimset('TolX',1e-12,'TolFun',1e-6);
+opt=optimset('Display','off');
 x=fsolve(@(x)F(x,MU,alpha,sig0,normr0,t,t0),0,opt);
 
 
