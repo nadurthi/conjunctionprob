@@ -10,7 +10,7 @@ Re=6378.165; %km
 rsat = r(1:3); rsat = rsat(:);
 vsat = r(4:6); vsat = vsat(:);
 
-ad_J2 = 1*ComputeJ2(rsat,Re,mu); % J2 Calculation
+ad_J2 = 0*ComputeJ2(rsat,Re,mu); % J2 Calculation
 % adrag = 1*ComputeAtmDarg(rsat,vsat,Re,Cd,area,msat); % Drag Calculation
 % ad_J2=[0,0,0];
 adrag=[0,0,0];

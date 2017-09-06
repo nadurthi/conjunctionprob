@@ -1,9 +1,9 @@
-function OE = XYZ2OE(XX)
+function OE = XYZ2OE_m(XX,MU)
 XX=XX(:);
 X=XX(1:3);
 V=XX(4:6);
 
- mu=398601.2;
+ mu=MU;
  
 %% Input - X,V position and velocity of the point mass... 
 
