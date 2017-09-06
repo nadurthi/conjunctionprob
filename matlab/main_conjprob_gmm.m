@@ -15,7 +15,7 @@ XX0=X0_mu; %Xmc(i,:)'
 
 Xm=Xmc(10,:)';
 [t,X1]= ode45(@twoBody,T,Xm,opt);
- [X1(85,:)',Xt+PHI*(Xm-XX0)]
+ [X1(85,:)',Xt,Xt+PHI*(Xm-XX0)]
  
  
 %%
