@@ -51,7 +51,7 @@ else
     G=r*r0*sin(th)/sqrt(MU*p);
     Ft=sqrt(MU)/(r0*p)*(sig0*(1-cos(th))-sqrt(p)*sin(th));
     Gt=1-f0/p*(1-cos(th));
-    
+%     detfg=F*Gt-G*Ft
     % keyboard
     Xfg=[F*X0(1:3)+G*X0(4:6); Ft*X0(1:3)+Gt*X0(4:6)];
     
