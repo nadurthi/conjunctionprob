@@ -14,11 +14,11 @@ T=[linspace(0,160690,10),[160691:160790]];
 
 % [X,Xorb]=sim1_forwardmap(T(85),X0_mu,MU);
 XX0=X0_mu; %Xmc(i,:)'
-[Xt,Xtorb,X0,X0orb,ft,f0,PHI]=sim1_forwardSTM(T(85),XX0,MU,true);
+[Xt,Xtorb,X0,X0orb,ft,f0,PHI]=sim1_forwardSTM(T(85),XX0,MU,true,true,probFunc0);
 
-Xm=Xmc(10,:)';
-[t,X1]= ode45(@twoBody,T,Xm,opt);
- [X1(85,:)',Xt,Xt+PHI*(Xm-XX0)]
+% Xm=Xmc(10,:)';
+% [t,X1]= ode45(@twoBody,T,Xm,opt);
+%  [X1(85,:)',Xt,Xt+PHI*(Xm-XX0)]
  
  
 %%

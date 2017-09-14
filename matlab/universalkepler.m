@@ -29,7 +29,7 @@ x=fsolve(@(x)F(x,MU,alpha,sig0,normr0,t,t0),0,opt);
 end
 
 
-function err=F(x,MU,alpha,sig0,normr0,t,t0)
+function r=F(x,MU,alpha,sig0,normr0,t,t0)
 
  [C,S]=transcendentalfunc(alpha*x^2);
  err=sig0*x^2*C+(1-normr0*alpha)*x^3*S+normr0*x-sqrt(MU)*(t-t0);

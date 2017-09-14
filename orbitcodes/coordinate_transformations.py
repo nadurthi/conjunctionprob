@@ -142,7 +142,7 @@ def transcendentalfunc(y):
     return (C,S)
 
 
-def F(MU,alpha,sig0,normr0,t,t0,x):
+def univkepler_err(MU,alpha,sig0,normr0,t,t0,x):
 
     [C,S]=transcendentalfunc(alpha*x^2);
     err=sig0*x**2*C+(1-normr0*alpha)*x**3*S+normr0*x-np.sqrt(MU)*(t-t0);
@@ -150,7 +150,8 @@ def F(MU,alpha,sig0,normr0,t,t0,x):
 
 def universalkepler(a,t0,X0,t,options):
     x=1
-    minimize_scalar()
+    F=functools.partial(univkepler_err,)
+    x=minimize_scalar(F)
 
     return x
 
