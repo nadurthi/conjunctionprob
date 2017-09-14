@@ -98,7 +98,7 @@ for id =unique(IDX)'
     plot3(Y(IDX==id,1),Y(IDX==id,2),Y(IDX==id,3),colmark{id})
 end
 
-IDY = kmeans(Y,25);
+IDY = kmeans(Y,20);
 
 figure
 hold on
