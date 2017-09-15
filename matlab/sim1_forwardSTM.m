@@ -90,7 +90,7 @@ if computeProb==false
     pt=NaN;
 else
    p0=probFunc0(X0);
-   pt=p0/abs(det(PHI)); 
+   pt=p0/abs(det(1)); 
     
 end
 
