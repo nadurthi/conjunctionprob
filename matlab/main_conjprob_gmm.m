@@ -6,7 +6,7 @@ opt = odeset('reltol',1e-12,'abstol',1e-12);
 
 % satellite 1:
 X0_mu = [7000 0 0 1.0374090357 -1.0374090357 7.4771288355]';
-P0 =blkdiag(0.01,0.01,0.01,1e-6,1e-6,1e-6);
+P0 =blkdiag(0.000001,0.000001,0.000001,1e-10,1e-10,1e-10);
 
 probFunc0=@(X)mvnpdf(X,X0_mu,P0);
 
@@ -23,10 +23,10 @@ XX0=X0_mu; %Xmc(i,:)'
  
  
 %%
-[Xcut8,wcut8]=conjugate_dir_gausspts_till_8moment(X0_mu,P0);
-Nmc=5000;
-% Xmc=mvnrnd(X0_mu,P0,Nmc);
-Xmc=[mvnrnd(X0_mu,0.5*P0,1500);mvnrnd(X0_mu,1*P0,1500);mvnrnd(X0_mu,2*P0,1500);mvnrnd(X0_mu,3*P0,1500)];
+% [Xcut8,wcut8]=conjugate_dir_gausspts_till_8moment(X0_mu,P0);
+Nmc=100000;
+Xmc=mvnrnd(X0_mu,P0,Nmc);
+% Xmc=[mvnrnd(X0_mu,0.5*P0,1500);mvnrnd(X0_mu,1*P0,1500);mvnrnd(X0_mu,2*P0,1500);mvnrnd(X0_mu,3*P0,1500)];
 pdf0=mvnpdf(Xmc,X0_mu',P0);
 
 % for i=[3]
@@ -50,16 +50,16 @@ pdf(i)=pt;
 i
 end
 
-Ncut=length(wcut8);
-XTcut=zeros(Ncut,6);
-pdfcut=zeros(Ncut,1);
-for i=1:Ncut
-    [X,Xorb,X0,X0orb,ft,f0,PHI,p0,pt]=sim1_forwardSTM(T(85),Xcut8(i,:)',MU,false,true,probFunc0);
-% [X,Xorb]=sim1_forwardmap(T(85),Xmc(i,:)',MU);
-XTcut(i,:)=X;
-pdfcut(i)=pt;
-i
-end
+% Ncut=length(wcut8);
+% XTcut=zeros(Ncut,6);
+% pdfcut=zeros(Ncut,1);
+% for i=1:Ncut
+%     [X,Xorb,X0,X0orb,ft,f0,PHI,p0,pt]=sim1_forwardSTM(T(85),Xcut8(i,:)',MU,false,true,probFunc0);
+% % [X,Xorb]=sim1_forwardmap(T(85),Xmc(i,:)',MU);
+% XTcut(i,:)=X;
+% pdfcut(i)=pt;
+% i
+% end
 
 %%
 IDX = kmeans(XT,20);
@@ -131,8 +131,34 @@ PT=cov(XT);
 pdfGasssT=mvnpdf(XT,muT,PT);
 
 figure
-plot3(XT(:,1),XT(:,2),abs(pdf),'ro')
+plot(XT(:,1),pdf,'bo')
 figure
-plot3(XT(:,1),XT(:,2),abs(pdfGasssT),'kx')
+plot(XT(:,1),pdfGasssT,'bo')
+
+figure
+plot(XT(:,2),pdf,'bo')
+figure
+plot(XT(:,2),pdfGasssT,'bo')
+
+figure
+plot(XT(:,3),pdf,'bo')
+figure
+plot(XT(:,3),pdfGasssT,'bo')
 
 
+figure
+plot(XT(:,4),pdf,'bo')
+figure
+plot(XT(:,4),pdfGasssT,'bo')
+
+
+figure
+plot(XT(:,5),pdf,'bo')
+figure
+plot(XT(:,5),pdfGasssT,'bo')
+
+
+figure
+plot(XT(:,6),pdf,'bo')
+figure
+plot(XT(:,6),pdfGasssT,'bo')
