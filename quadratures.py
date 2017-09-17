@@ -47,3 +47,13 @@ def Generate_conjaxis(n):
 
         X[i,:]=sig
     return X
+
+
+
+
+
+def Generate_principalaxis(n):
+    A=np.identity(n)
+
+    return A
+

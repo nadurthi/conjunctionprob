@@ -19,12 +19,6 @@ def coloriter():
         for c in ['b','r','g','k','y']:
             yield c+m
 
-def F(rth):
-    x=rth[0]*np.cos(rth[1])
-    y=rth[0]*np.sin(rth[1])
-    return np.array([x,y])
-
-
 
 def plotellipse(MU,SIG):
     MU=MU.reshape(-1,1)
@@ -117,17 +111,6 @@ class Normalize_11(object):
             return Y,probs
         else:
             return Y
-        
-def Frev(X):
-    r=np.linalg.norm(X)
-    th=np.arctan2(X[1],X[0])
-    return np.array([r,th])
-
-
-def FJac(rth):
-    th=rth[1]
-    r=rth[0]
-    return np.array( [[np.cos(th),-r*np.sin(th)],[np.sin(th),r*np.cos(th)]] )
 
 
 def GetMeanCov(X,w=None):
@@ -672,19 +655,15 @@ def printtree(estimator):
     
 
 
-def F_polar2cart(rth):
-    x=rth[0]*np.cos(rth[1])
-    y=rth[0]*np.sin(rth[1])
-    return np.array([x,y])
 
-def FJac_polar2cart(rth):
-    th=rth[1]
-    r=rth[0]
-    return np.array( [[np.cos(th),-r*np.sin(th)],[np.sin(th),r*np.cos(th)]] )
 
 
 def mvnrnd(M,P,N=1):
     X=np.random.multivariate_normal(M.reshape(1,-1)[0], P, N)
+    return X
+
+def mvnrnd0I(dim,N=1):
+    X=np.random.multivariate_normal(np.zeros(dim), np.identity(dim), N)
     return X
 
 
@@ -700,3 +679,23 @@ def getthresplots(pdiff,typ='Rel'):
         fig,ax=plt.subplots()
         h=ax.hist(np.abs(pdiff),np.linspace(np.percentile(np.abs(pdiff),20)/2,2*np.percentile(np.abs(pdiff),80),100))
         ax.set_title('Abs error')
+
+
+def getclusterIDs(X,means,ClusterIds=None):
+    """
+    given the means and their ids in clusterid, 
+    .... cluster X into those ids
+    """
+    if ClusterIds is None:
+        ClusterIds=range(means.shape[0])
+
+    Xids=np.zeros(X.shape[0])
+    for i in range(X.shape[0]):
+        d=[]
+        for j in range(means.shape[0]):
+            d.append( (j,np.linalg.norm(X[i,:]-means[j,:])))    
+
+        D=sorted(d,key=lambda x: x[1])
+        Xids[i]=ClusterIds[ D[0][0] ]
+
+    return Xids

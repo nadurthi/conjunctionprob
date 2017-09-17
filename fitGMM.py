@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sc
-
+import Estimation as estmn
+import quadratures as qdtr
 
 def getrawmoms(N,mu,sig):
 	X=[]
@@ -9,12 +10,90 @@ def getrawmoms(N,mu,sig):
 		
 
 class GMM0I(object):
+	"""
+	Contract: give the dimension and the means for zero-identity
+	you will get the weights,means,covs
+	"""
 	def __init__(self,dim=2):
 		self.dim=dim
 
 		pass
 
-	def Solvegmms(means):
+	def Getgmms(self,means):
 		# first get the positive quadrant points
 		for i in range(self.dim): 	
 			means=means[ means[i]>=0,:]
+
+	def Getgmms_bysamples_symmtericmeans(self,N,oldmeans,newmeans,useaxis='PA',thres=0.1):
+		newmeans=np.abs(newmeans)
+		
+
+
+		Xnewmeans=None
+		if useaxis=='PA':
+			Xpa=qdtr.Generate_principalaxis(self.dim)
+			for i in range(newmeans.shape[0]):
+				pp=np.multiply( Xpa,np.tile(newmeans[i],(Xpa.shape[0],1)) )
+				if Xnewmeans is None:
+					Xnewmeans=pp
+				else:
+					Xnewmeans=np.vstack((Xnewmeans,pp))
+
+		if useaxis=='CA':
+			Xpa=qdtr.Generate_conjaxis(self.dim)
+			for i in range(newmeans.shape[0]):
+				pp=np.multiply( Xpa,np.tile(newmeans[i],(Xpa.shape[0],1)) )
+				if Xnewmeans is None:
+					Xnewmeans=pp
+				else:
+					Xnewmeans=np.vstack((Xnewmeans,pp))
+
+		Xnewmeans=np.vstack((oldmeans,Xnewmeans))
+
+		d=[]
+		for i in range(Xnewmeans.shape[0]):
+			for j in range(i+1,Xnewmeans.shape[0]):
+				d.append((i,j,np.linalg.norm( Xnewmeans[j]-Xnewmeans[i] ),np.linalg.norm(Xnewmeans[i]),np.linalg.norm(Xnewmeans[j]) ))
+		d=filter(lambda x: x[2]<=thres,d)
+		delmeans=set([x[0] if x[3]>x[4] else x[1]  for x in d])
+		Xnewmeans=np.array([Xnewmeans[i] for i in range(Xnewmeans.shape[0]) if i not in delmeans])
+
+		return self.Getgmms_bysamples(1000,Xnewmeans)
+
+
+	def Getgmms_bysamples(self,N,means):
+		Ncomp=means.shape[0]
+		while True:
+			X0=estmn.mvnrnd0I(self.dim,N=N)
+			Xids=estmn.getclusterIDs(X0,means,ClusterIds=None)
+			ClusterM=[]
+			ClusterP=[]
+			for i in range(Ncomp):
+				XX=X0[Xids==i,:]
+				if XX.shape[0]<100:
+					N=N*2
+					break
+
+				m,p=estmn.GetMeanCov(XX)
+				ClusterM.append(m)
+				ClusterP.append(p)
+
+		# now optimize the weights
+		b=estmn.mvnpdf(X0,np.zeros(self.dim),np.identity(self.dim))
+		A=None
+		for i in range(Ncomp):
+			pp=estmn.mvnpdf(X0,ClusterM[i][0],ClusterP[i][1]).reshape(-1,1)
+			if i==0:
+				A=pp
+			else:
+				A=np.hstack((A,pp))
+
+
+
+		results=sc.optimize.lsq_linear(A,b,bounds= (np.zeros(Ncomp), np.ones(Ncomp)) )
+		weights=results.x
+		weights=weights/np.sum(weights)
+		ClusterW=weights
+
+
+		return (ClusterW,ClusterM,ClusterP		)
