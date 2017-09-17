@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 from sklearn.cluster import KMeans
+import copy
+import cvxpy as cxpy
+import time
+
+print "loaded Estimation module on : ",pd.datetime.today()
 
 def coloriter():
     for m in ['o','s','*','+']:
@@ -19,20 +24,100 @@ def F(rth):
     y=rth[0]*np.sin(rth[1])
     return np.array([x,y])
 
-def Normalize01(X,w=None,probs=None):
-    Y=np.zeros(X.shape)
-    M,P=GetMeanCov(X,w=w)
-    invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
-    M=M.reshape(-1,1)
-    for i in range(X.shape[0]):
-        Y[i,:]=np.dot(invsqrtP,X[i,:].reshape(-1,1)-M).reshape(1,-1)[0]
-    
-    if probs is not None:
-        probs=probs/np.abs( np.linalg.det(invsqrtP) )
-        return Y,probs
-    else:
-        return Y
 
+
+def plotellipse(MU,SIG):
+    MU=MU.reshape(-1,1)
+    th=np.linspace(0,2*np.pi,100)
+    X=np.zeros((100,2))
+    for i in range(100):
+        X[i,:]=( np.dot(sc.linalg.sqrtm(SIG),np.array([[np.cos(th[i])],[np.sin(th[i])]]))+MU ).transpose()[0]
+    plt.plot(X[:,0],X[:,1],'r')
+
+
+class Normalize0I(object):
+    def __init__(self,X,scale=1,w=None):
+        
+        M,P=GetMeanCov(X,w=w)
+        self.mean=M
+        self.cov=scale*P
+        
+    def normalize(self,X,probs=None):
+        P=self.cov
+        M=self.mean
+        invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
+        M=M.reshape(-1,1)
+        
+        Y=np.zeros(X.shape)
+        
+        for i in range(X.shape[0]):
+            Y[i,:]=np.dot(invsqrtP,X[i,:].reshape(-1,1)-M).reshape(1,-1)[0]
+
+        if probs is not None:
+            probs=probs/np.abs( np.linalg.det(invsqrtP) )
+            return Y,probs
+        else:
+            return Y
+    
+    def revert(self,X,probs=None):
+        P=self.cov
+        M=self.mean
+        sqrtP=sc.linalg.sqrtm(P) 
+        M=M.reshape(-1,1)
+        Y=np.zeros(X.shape)
+        for i in range(X.shape[0]):
+            Y[i,:]=(np.dot(sqrtP,X[i,:].reshape(-1,1))+M).reshape(1,-1)[0]
+
+        if probs is not None:
+            probs=probs/np.abs( np.linalg.det(sqrtP) )
+            return Y,probs
+        else:
+            return Y
+
+class Normalize_11(object):
+    def __init__(self,X,w=None):
+        
+        M,P=GetMeanCov(X,w=w)
+        self.mean=M
+        Y=X-np.tile(M.reshape(1,-1)[0],(X.shape[0],1))
+        Ymn=np.amax(np.abs(Y),axis=0)
+        P=np.diag(np.power(Ymn,2))
+#         Ymx=np.amax(Y,axis=0)
+        
+        self.cov=P
+        
+    def normalize(self,X,probs=None):
+        P=self.cov
+        M=self.mean
+        invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
+        M=M.reshape(-1,1)
+        
+        Y=np.zeros(X.shape)
+        
+        for i in range(X.shape[0]):
+            Y[i,:]=np.dot(invsqrtP,X[i,:].reshape(-1,1)-M).reshape(1,-1)[0]
+
+        if probs is not None:
+            probs=probs/np.abs( np.linalg.det(invsqrtP) )
+            return Y,probs
+        else:
+            return Y
+    
+    def revert(self,X,probs=None):
+        P=self.cov
+        M=self.mean
+        sqrtP=sc.linalg.sqrtm(P) 
+        M=M.reshape(-1,1)
+        Y=np.zeros(X.shape)
+        for i in range(X.shape[0]):
+            Y[i,:]=(np.dot(sqrtP,X[i,:].reshape(-1,1))+M).reshape(1,-1)[0]
+
+        if probs is not None:
+            probs=probs/np.abs( np.linalg.det(sqrtP) )
+            return Y,probs
+        else:
+            return Y
+        
 def Frev(X):
     r=np.linalg.norm(X)
     th=np.arctan2(X[1],X[0])
@@ -78,18 +163,20 @@ def UnscentedTransform_pts(mu,P):
     
     return (X,w)
 
-def fitclusters(Z,w=None):
+def fitclusters(Z,NN=2,w=None):
     M,P=GetMeanCov(Z,w=w)
     eigs,v=np.linalg.eig(P)
     print eigs
     maxeig=np.sqrt( max(eigs) )
+    mineig=np.sqrt( min(eigs) )
     
-    print "main clsuter"
-    print M
-    print maxeig
+#     print "main clsuter"
+#     print M
+#     print maxeig
     
     savekmeans={}
-    for Ncls in [2,3,4]:
+    flg=0
+    for Ncls in range(1,NN+1):
         maxeig
         kmeans = KMeans(n_clusters=Ncls, random_state=10).fit(Z)
         Zids=kmeans.labels_
@@ -100,47 +187,111 @@ def fitclusters(Z,w=None):
                 d.append( np.linalg.norm(kmeans.cluster_centers_[i]-kmeans.cluster_centers_[j]) )
         
         savekmeans[Ncls]=kmeans
-        print "d = ",d
-        if min(d)< maxeig:
-            break
-            
-    print "#cluster = ",Ncls-1
+        print "cluster split ------------==========---------============-------"
+        print d,maxeig,mineig
+        if len(d)!=0:
+            if min(d)< maxeig:
+                N=Ncls-1
+                flg=1
+                break
     
-    N=Ncls-1
+    if flg==0:
+        N=Ncls
     kmeans=savekmeans[N]
     # split the points into clusters
 
     return (N,kmeans.labels_,kmeans.cluster_centers_)
 
+def weightcost(x,A,b):
+    return np.linalg.norm( np.dot(A,x.reshape(-1,1))-b )**2
+
+
+def mvnpdf(X,M,P):
+    
+    invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
+    Y=np.zeros(X.shape)
+    for j in range(X.shape[0]):
+        Y[j,:]=np.dot(invsqrtP,(X[j,:]-M).reshape(-1,1)).reshape(1,-1)
+    pp=multivariate_normal.pdf(Y, np.zeros(X.shape[1]), np.identity(X.shape[1]))
+    pp=pp*np.abs(np.linalg.det(invsqrtP))
+    
+    return pp
+
 class GaussMixModel(object):
-    def __init__(self,ws,Ms,Ps):
-        self.weights=list(ws)
+    def __init__(self,ws,Ms,Ps,**kwargs):
+        self.weights=copy.deepcopy( list(ws) )
         self.means=np.array(Ms).copy()
         self.covs=np.array(Ps).copy()
         self.N=len(ws)
+        self.illcond=set([])
+        
+        self.appendedstate={}
+        
+        for key,value in kwargs.items():
+            setattr(self,key,value)
+        
+    def MakeCopy(self):
+        return GaussMixModel(self.weights,self.means,self.covs,appendedstate=self.appendedstate)
     
+    def scalecovs(self,c):
+        for i in range(self.N):
+            self.covs[i]=self.covs[i]*c
+            
+    def lineartransform(self,A,b):
+        """
+        linear trasnform the GMM
+        """
+        for i in range(self.N):
+            self.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
+            self.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
+            
     def purgecomponent(self,i):
 #         print "purging i = ",i," with mean ",self.means[i]," and cov ",self.covs[i]
-        del self.weights[i]
+        self.weights=np.delete(self.weights,i)
         self.means=np.delete(self.means,i,axis=0)
         self.covs=np.delete(self.covs,i,axis=0)
         self.N=self.N-1
         
     def AppendComponents(self,ws,Ms,Ps):
+        if len(ws)==0 or len(Ms)==0 or len(Ps)==0:
+            return
+        self.appendedstate={'ws':ws,'Ms':Ms,'Ps':Ps}
+        
         self.weights=list(self.weights)+list(ws)
         self.means=np.vstack(( self.means,np.array(Ms).copy() ))
         self.covs=np.vstack(( self.covs,np.array(Ps).copy() ))
         self.N=len(self.weights)
     
     def evalaute_probability(self,X):
-        p=np.zeros(X.shape[0])
+
+        pp=np.zeros(X.shape[0])
+        p=self.get_component_probabilities(X)
+        
         for i in range(self.N):
-            p=p+self.weights[i]*multivariate_normal.pdf(X, self.means[i], self.covs[i])
-        return p
-    def get_component_probabilities(self,X):
+            pp=pp+self.weights[i]*p[i]
+
+        return pp
+    
+    
+    
+    def get_component_probabilities(self,X,USE0I=True):
         p=[]
         for i in range(self.N):
-            p.append( multivariate_normal.pdf(X, self.means[i], self.covs[i]) )
+            if USE0I:
+                pp=mvnpdf(X,self.means[i],self.covs[i])
+            else:
+                try:
+                    pp=multivariate_normal.pdf(X, self.means[i], self.covs[i],allow_singular=False)
+
+                except:
+                    print "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+                    print "                SINGULAR COMPONENT ", i,"           "
+                    print "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+
+                    pp=mvnpdf(X,self.means[i],self.covs[i])
+            
+            p.append( pp)
+            
         return np.array(p)
     
     def Prune_byweight(self):
@@ -150,7 +301,7 @@ class GaussMixModel(object):
         while(1):
             flg=0
             for i in range(self.N):
-                if np.abs(self.weights[i]-mnw)>3*stdw or self.weights[i]<1e-25:
+                if self.weights[i]<1e-25:
                     self.purgecomponent(i)
                     flg=1
                     break
@@ -172,6 +323,27 @@ class GaussMixModel(object):
                     break
             if flg==0:
                 break
+    
+    def Prune_LowRank(self):
+        eigs=np.abs( np.array([np.linalg.eig(P)[0] for P in self.covs]) )
+        eigmean=np.mean(eigs,axis=0)
+        eigstd=np.std(eigs,axis=0)
+        
+        while(1):
+            flg=0
+            for i in range(self.N):
+                if np.linalg.matrix_rank(self.covs[i])<self.covs[i].shape[0]:
+                    self.purgecomponent(i)
+                    eigs=np.delete(eigs,i,axis=0)
+                    
+                    flg=1
+                    break
+            if flg==0:
+                break
+                
+        
+        
+
         
     def getweight_rangeid(self,w):
         W={}
@@ -211,26 +383,76 @@ class GaussMixModel(object):
         
         return weights
     
+    def normalize_weights(self):
+        weights=np.ones(self.N)
+        weights=weights/np.sum(weights)
+        self.weights=weights
+        
+        return weights
+    
     def optimize_weights_prob(self,X,pT):
         p0=pT
         p=self.get_component_probabilities(X)
         A=p.transpose()
         b=p0
-        results=sc.optimize.lsq_linear(A, b,bounds=(np.zeros(self.N), np.ones(self.N)))
+
+
+        results=sc.optimize.lsq_linear(A,b,bounds= (np.zeros(self.N), np.ones(self.N)) )
         weights=results.x
         weights=weights/np.sum(weights)
         self.weights=weights
         
         return weights
     
+    def optimize_weights_prob_nonlinear(self,X,pT):
+        p0=pT
+        p=self.get_component_probabilities(X)
+        A=p.transpose()
+        b=p0
+        cons = ({'type': 'eq',
+                'fun' : lambda x: np.sum(x)-1,
+                }) # 'jac' : lambda x: np.ones(len(x)) (np.zeros(self.N), np.ones(self.N))
+        results=sc.optimize.minimize(weightcost, np.ones(self.N)/self.N,args=(A,b),constraints=cons,bounds=[(0,1) for i in range(self.N)] )
+        weights=results.x
+        weights=weights/np.sum(weights)
+        self.weights=weights
+        
+        return weights
+    
+    def optimize_weights_cvx(self,X,pT):
+
+        
+        p0=pT
+        p=self.get_component_probabilities(X)
+        A=p.transpose()
+        b=p0
+        
+        # Construct the problem.
+        x = cxpy.Variable(self.N)
+        objective = cxpy.Minimize(cxpy.norm(A*x - b,1))
+        constraints = [0 <= x, x <= 1,cxpy.sum_entries(x)==1]
+        prob = cxpy.Problem(objective, constraints)
+
+        # The optimal objective is returned by prob.solve().
+        result = prob.solve(solver='CVXOPT')
+        if np.isfinite(result):
+            # The optimal value for x is stored in x.value.
+            self.weights=x.value
+            return x.value
+        else:
+            return self.optimize_weights_prob(X,pT)
+        # The optimal Lagrange multiplier for a constraint
+        # is stored in constraint.dual_value.
+#         print constraints[0].dual_value
+
     def plotcomp_ellipsoids(self,k,dims=[0,1],comp=None,ax=None):
         if comp is None:
             rang=range(self.N)
         else:
             rang=[comp]
         for i in rang:
-            MU=self.means[i].reshape(-1,1)[0:2]
-            SIG=self.covs[i][0:2,0:2]
+            MU=self.means[i].reshape(-1,1)[[dims[0],dims[1] ]]
+            SIG=self.covs[i][[[ dims[0] ],[dims[1]]],[dims[0],dims[1]]]
             sqrtmSIG=sc.linalg.sqrtm(k*SIG)
             th=np.linspace(0,2*np.pi,100)
             X=np.zeros((100,2))
@@ -241,7 +463,11 @@ class GaussMixModel(object):
             else:
                 ax.plot(X[:,0],X[:,1],'r')
                 
-        
+
+def MakeGMMcopy(GMM):
+    return GaussMixModel(GMM.weights,GMM.means,GMM.covs)
+
+
 def transformGMM(GMM0,Func):
     GMM1=GaussMixModel(GMM0.weights,GMM0.means,GMM0.covs)
     for i in range(GMM0.N):
@@ -330,7 +556,7 @@ def getclassifiedregions(pdiff,thres,X,rndT=0,min_samples_leaf=100,max_depth=2):
     nodepaths,leafnodes=getleafpaths(clf)
     Xleafids=getleafids(X,nodepaths,leafnodes)
     
-    Xclass=err
+    Xclass=pdiff
     Xclass_errors={}
     for leafid in leafnodes:
         Y=Xclass[Xleafids==leafid]
@@ -339,21 +565,64 @@ def getclassifiedregions(pdiff,thres,X,rndT=0,min_samples_leaf=100,max_depth=2):
     return (clf,nodepaths,leafnodes,Xleafids,Xclass,Xclass_errors)
 
 
-def getpartitionMeanCovs(X,Xpartids):
+def getpartitionMeanCovs(X,Xpartids,probs=None):
     newmeans=[]
     newcovs=[]
     leafids=np.unique(Xpartids)
     for lfn in leafids:
         XX=X[Xpartids==lfn,:]
-        mm,cc=GetMeanCov(XX)
+        if len(XX)==0:
+            continue
+            
+        if probs is not None:
+            w=probs[Xpartids==lfn].copy()
+            w=w/np.sum(w)
+        else:
+            w=None
+            
+        mm,cc=GetMeanCov(XX,w=w)
+        A=[]
+        meanprob=np.max(probs[Xpartids==lfn])
+        if meanprob==0:
+            continue
+            
+        for c in np.hstack((np.linspace(1e-5,1,100))):
+#             pp=multivariate_normal.pdf(mm, mm, c*cc)
+            pp=1/np.sqrt(np.linalg.det(2*np.pi*c*cc))
+            A.append( (c,np.linalg.norm(pp-meanprob),pp,cc,1/np.sqrt(np.linalg.det(2*np.pi*cc))) )
+        
+#         for c in np.hstack((np.linspace(1e-15,5,1000),np.linspace(5,50,100))):
+#             cq=np.identity(X.shape[1])
+#             pq=1/np.sqrt(np.linalg.det(2*np.pi*c*cq))
+#             A.append( (c,np.linalg.norm(pq-meanprob),pq,cq) )
+        
+        
+        try:
+            S=sorted(A,key=lambda x:x[1])
+            c=S[0][0]
+        except:
+            print A
+            print mm,cc
+        c=S[0][0]
+        pp=S[0][2]
+        cc=S[0][3]
+        
+        print "meanprob = ",meanprob," c = ",c,pp ," max eig cc = ",max(np.linalg.eig(cc)[0]) ," cc0 = ",S[0][4]
+        
+        
+        cc=c*cc
+   
+
         if np.linalg.matrix_rank(cc)<cc.shape[0]:
+            continue
+            
             eig,_=np.linalg.eig(cc)
             eig=np.abs(eig)
             meaneig=sorted(eig)[int(len(eig)/2)]
             cc=np.diag(np.ones(cc.shape[0])*meaneig)
             
         newmeans.append( mm )
-        newcovs.append( 1.0*cc )
+        newcovs.append( cc )
     return newmeans,newcovs
 
 
@@ -401,3 +670,33 @@ def printtree(estimator):
                      ))
     print()
     
+
+
+def F_polar2cart(rth):
+    x=rth[0]*np.cos(rth[1])
+    y=rth[0]*np.sin(rth[1])
+    return np.array([x,y])
+
+def FJac_polar2cart(rth):
+    th=rth[1]
+    r=rth[0]
+    return np.array( [[np.cos(th),-r*np.sin(th)],[np.sin(th),r*np.cos(th)]] )
+
+
+def mvnrnd(M,P,N=1):
+    X=np.random.multivariate_normal(M.reshape(1,-1)[0], P, N)
+    return X
+
+
+def getthresplots(pdiff,typ='Rel'):
+    if typ=='Rel':
+#         pdiff=100*np.abs( np.divide((py-pyest),py) )
+        fig,ax=plt.subplots()
+        h=ax.hist(np.abs(pdiff),np.linspace(np.percentile(np.abs(pdiff),20)/2,2*np.percentile(np.abs(pdiff),80),100))
+        ax.set_title('Rel error')
+
+    else:
+#         pdiff=100*np.abs( np.divide((py-pyest),1) )
+        fig,ax=plt.subplots()
+        h=ax.hist(np.abs(pdiff),np.linspace(np.percentile(np.abs(pdiff),20)/2,2*np.percentile(np.abs(pdiff),80),100))
+        ax.set_title('Abs error')
