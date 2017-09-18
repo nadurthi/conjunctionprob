@@ -18,12 +18,8 @@ class GMM0I(object):
 
 
 
-	def Getgmms(self,means):
-		# first get the positive quadrant points
-		for i in range(self.dim): 	
-			means=means[ means[i]>=0,:]
 
-	def Getgmms_bysamples_symmtericmeans(self,N,oldmeans,newmeans,useaxis='PA',thres=0.1):
+	def Getgmms_bysamples_symmtericmeans(self,N,oldmeans,newmeans,useaxis='PA',snap2dim=0,thres=0.1):
 		newmeans=np.abs(newmeans)
 		
 
@@ -31,6 +27,7 @@ class GMM0I(object):
 		Xnewmeans=None
 		if useaxis=='PA':
 			Xpa=qdtr.Generate_principalaxis(self.dim)
+			Xpa=Xpa[Xpa[:,snap2dim]!=0,:]
 			for i in range(newmeans.shape[0]):
 				pp=np.multiply( Xpa,np.tile(newmeans[i],(Xpa.shape[0],1)) )
 				if Xnewmeans is None:
@@ -57,21 +54,25 @@ class GMM0I(object):
 		delmeans=set([x[0] if x[3]>x[4] else x[1]  for x in d])
 		Xnewmeans=np.array([Xnewmeans[i] for i in range(Xnewmeans.shape[0]) if i not in delmeans])
 
-		return self.Getgmms_bysamples(1000,Xnewmeans)
+		return self.Getgmms_bysamples(1000,None,Xnewmeans)
 
 
-	def Getgmms_bysamples(self,N,means):
+	def Getgmms_bysamples(self,N,oldmeans,newmeans):
+		if oldmeans is None:
+			means=newmeans
+		else:
+			means=np.vstack((oldmeans,newmeans))
+
 		Ncomp=means.shape[0]
 		while True:
 			X0=estmn.mvnrnd0I(self.dim,N=N)
-			starttime=time.time()
 			Xids=estmn.getclusterIDs(X0,means,ClusterIds=None)
 			ClusterM=[]
 			ClusterP=[]
 			flg=0
 			for i in range(Ncomp):
 				XX=X0[Xids==i,:]
-				if XX.shape[0]<100:
+				if XX.shape[0]<50:
 					N=N*2
 					flg=1
 					break
@@ -86,6 +87,9 @@ class GMM0I(object):
 				break
 
 		# now optimize the weights
+		ClusterP=np.array(ClusterP)
+		ClusterP[:,1,1]=ClusterP[:,1,1]*4
+
 		b=estmn.mvnpdf(X0,np.zeros(self.dim),np.identity(self.dim))
 		A=None
 		for i in range(Ncomp):
@@ -102,5 +106,6 @@ class GMM0I(object):
 		weights=weights/np.sum(weights)
 		ClusterW=weights
 
+		
 
 		return (ClusterW,ClusterM,ClusterP		)

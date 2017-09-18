@@ -201,16 +201,7 @@ def weightcost(x,A,b):
     return np.linalg.norm( np.dot(A,x.reshape(-1,1))-b )**2
 
 
-def mvnpdf(X,M,P):
-    
-    invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
-    Y=np.zeros(X.shape)
-    for j in range(X.shape[0]):
-        Y[j,:]=np.dot(invsqrtP,(X[j,:]-M).reshape(-1,1)).reshape(1,-1)
-    pp=multivariate_normal.pdf(Y, np.zeros(X.shape[1]), np.identity(X.shape[1]))
-    pp=pp*np.abs(np.linalg.det(invsqrtP))
-    
-    return pp
+
 
 def transformGMM(GMM0,Func):
     GMM1=GaussMixModel(GMM0.weights,GMM0.means,GMM0.covs)
@@ -237,10 +228,22 @@ class GaussMixModel(object):
         
         for key,value in kwargs.items():
             setattr(self,key,value)
-        
-    def MakeCopy(self):
-        return GaussMixModel(self.weights,self.means,self.covs,appendedstate=self.appendedstate)
     
+    def setfixedpoints(self,X,px):
+        self.fixedpoints=X.copy()
+        self.fixedprobs=px.copy()
+
+    
+
+
+    def MakeCopy(self):
+        GMM=GaussMixModel(self.weights,self.means,self.covs,appendedstate=self.appendedstate)
+        GMM.fixedpoints=self.fixedpoints.copy()
+        GMM.fixedprobs=self.fixedprobs.copy()
+
+        return GMM
+
+
     def scalecovs(self,c):
         for i in range(self.N):
             self.covs[i]=self.covs[i]*c
@@ -253,14 +256,33 @@ class GaussMixModel(object):
                 M[d,:]=M[d,:]+self.weights[i]*getrawmoms(Nmoms,mu=self.means[i][d],sig=self.covs[i][d,d]) 
         return M
 
-    def lineartransform(self,A,b,inplace=False):
+    def Gaussiantransform(self,M,P,inplace=False,fixedpts_also=True):
+        b=M.reshape(-1,1)
+        A=sc.linalg.sqrtm(P)
+        return self.lineartransform(A,b,inplace=inplace,fixedpts_also=fixedpts_also)
+
+    def lineartransform(self,A,b,inplace=False,fixedpts_also=True):
         """
         linear trasnform the GMM
         """
+        if fixedpts_also:
+            Npoints=self.fixedpoints.shape[0]
+            newpoints=np.zeros(self.fixedpoints.shape)
+            newprobs=np.zeros(Npoints)
+
+            for i in range(Npoints):
+                newpoints[i,:]=(np.dot( A,self.fixedpoints[i,:].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
+                newprobs[i]=self.fixedprobs[i]/np.abs(np.linalg.det(A))
+
         if inplace:
             for i in range(self.N):
                 self.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
                 self.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
+
+            if fixedpts_also:            
+                self.fixedpoints=newpoints.copy()
+                self.fixedprobs=newprobs.copy()
+
 
         else:
 
@@ -270,12 +292,26 @@ class GaussMixModel(object):
                 GMM.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
                 GMM.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
             
+            if fixedpts_also:
+                GMM.fixedpoints=newpoints.copy()
+                GMM.fixedprobs=newprobs.copy()
+                
             return GMM
 
-    def functiontransform(self,Func,method='UT',inplace=False):
+    def functiontransform(self,Func,Fjac=None,method='UT',inplace=False,fixedpts_also=True):
         """
         linear trasnform the GMM
         """
+        if fixedpts_also and Fjac is not None:
+            Npoints=self.fixedpoints.shape[0]
+            newpoints=np.zeros(self.fixedpoints.shape)
+            newprobs=np.zeros(Npoints)
+
+            for i in range(Npoints):
+                A=Fjac(self.fixedpoints[i,:])
+                newpoints[i,:]=Func(self.fixedpoints[i,:])
+                newprobs[i]=self.fixedprobs[i]/np.abs(np.linalg.det(A))
+
         if inplace:
             for i in range(self.N):
                 X,w=UnscentedTransform_pts(self.means[i],self.covs[i])
@@ -285,6 +321,10 @@ class GaussMixModel(object):
                 mu,P=GetMeanCov(Y,w=w)
                 self.means[i]=mu
                 self.covs[i]=P
+
+                if fixedpts_also and Fjac is not None:            
+                    self.fixedpoints=newpoints.copy()
+                    self.fixedprobs=newprobs.copy()
 
         else:
 
@@ -297,6 +337,11 @@ class GaussMixModel(object):
                 mu,P=GetMeanCov(Y,w=w)
                 GMM1.means[i]=mu
                 GMM1.covs[i]=P
+
+            if fixedpts_also and Fjac is not None:
+                GMM1.fixedpoints=newpoints.copy()
+                GMM1.fixedprobs=newprobs.copy()
+
             return GMM1
 
     def purgecomponent(self,i):
@@ -316,6 +361,17 @@ class GaussMixModel(object):
         self.covs=np.vstack(( self.covs,np.array(Ps).copy() ))
         self.N=len(self.weights)
     
+    def ReplaceComponents(self,ws,Ms,Ps):
+        
+        self.weights=copy.deepcopy( list(ws) )
+        self.means=np.array(Ms).copy()
+        self.covs=np.array(Ps).copy()
+        self.N=len(ws)
+        self.illcond=set([])
+        
+        self.appendedstate={}
+
+
     def evalaute_probability(self,X):
 
         pp=np.zeros(X.shape[0])
@@ -326,7 +382,8 @@ class GaussMixModel(object):
 
         return pp
     
-    
+    def evalaute_probability_at_fixedpoints(self):
+        return self.evalaute_probability(self.fixedpoints)
     
     def get_component_probabilities(self,X,USE0I=True):
         p=[]
@@ -717,6 +774,24 @@ def printtree(estimator):
 
 
 
+def mvnpdf0I(X):
+    dim=X.shape[1]
+    M=np.zeros(dim)
+    P=np.identity(dim)
+    pp=multivariate_normal.pdf(X, M, P)
+
+    return pp
+
+def mvnpdf(X,M,P):
+    
+    invsqrtP=np.linalg.inv( sc.linalg.sqrtm(P) )
+    Y=np.zeros(X.shape)
+    for j in range(X.shape[0]):
+        Y[j,:]=np.dot(invsqrtP,(X[j,:]-M).reshape(-1,1)).reshape(1,-1)
+    pp=multivariate_normal.pdf(Y, np.zeros(X.shape[1]), np.identity(X.shape[1]))
+    pp=pp*np.abs(np.linalg.det(invsqrtP))
+    
+    return pp
 
 
 def mvnrnd(M,P,N=1):
