@@ -14,6 +14,18 @@ import time
 
 print "loaded Estimation module on : ",pd.datetime.today()
 
+
+def getrawmoms(Nmoms,mu=0,sig=1):
+    X=np.zeros(Nmoms)
+    for i in range(0,Nmoms):
+        C=np.abs( sc.special.hermitenorm(i,True) )
+        C=[int(c) for c in C]
+        x=np.repeat(mu/sig, len(C))
+        p=range(len(C)-1,-1,-1)
+        X[i]=sig**(len(C)-1)*np.sum( np.multiply(C,np.power(x,p)) )
+    return X
+
+
 def coloriter():
     for m in ['o','s','*','+']:
         for c in ['b','r','g','k','y']:
@@ -79,7 +91,7 @@ class Normalize_11(object):
 #         Ymx=np.amax(Y,axis=0)
         
         self.cov=P
-        
+    
     def normalize(self,X,probs=None):
         P=self.cov
         M=self.mean
@@ -200,6 +212,19 @@ def mvnpdf(X,M,P):
     
     return pp
 
+def transformGMM(GMM0,Func):
+    GMM1=GaussMixModel(GMM0.weights,GMM0.means,GMM0.covs)
+    for i in range(GMM0.N):
+        X,w=UnscentedTransform_pts(GMM0.means[i],GMM0.covs[i])
+        Y=np.zeros(X.shape)
+        for j in range(X.shape[0]):
+            Y[j,:]=Func(X[j,:])
+        mu,P=GetMeanCov(Y,w=w)
+        GMM1.means[i]=mu
+        GMM1.covs[i]=P
+    return GMM1
+
+
 class GaussMixModel(object):
     def __init__(self,ws,Ms,Ps,**kwargs):
         self.weights=copy.deepcopy( list(ws) )
@@ -219,15 +244,61 @@ class GaussMixModel(object):
     def scalecovs(self,c):
         for i in range(self.N):
             self.covs[i]=self.covs[i]*c
-            
-    def lineartransform(self,A,b):
+    
+    def getmarginalized_moms(self,Nmoms):
+        dim=len(self.means[0])
+        M=np.zeros((dim,Nmoms))
+        for d in range(dim):
+            for i in range(self.N):
+                M[d,:]=M[d,:]+self.weights[i]*getrawmoms(Nmoms,mu=self.means[i][d],sig=self.covs[i][d,d]) 
+        return M
+
+    def lineartransform(self,A,b,inplace=False):
         """
         linear trasnform the GMM
         """
-        for i in range(self.N):
-            self.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
-            self.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
+        if inplace:
+            for i in range(self.N):
+                self.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
+                self.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
+
+        else:
+
+            GMM=self.MakeCopy()
+
+            for i in range(self.N):
+                GMM.means[i]=(np.dot(A,self.means[i].reshape(-1,1))+b.reshape(-1,1)).reshape(1,-1)[0]
+                GMM.covs[i]=np.dot(np.dot(A,self.covs[i]),A.transpose())
             
+            return GMM
+
+    def functiontransform(self,Func,method='UT',inplace=False):
+        """
+        linear trasnform the GMM
+        """
+        if inplace:
+            for i in range(self.N):
+                X,w=UnscentedTransform_pts(self.means[i],self.covs[i])
+                Y=np.zeros(X.shape)
+                for j in range(X.shape[0]):
+                    Y[j,:]=Func(X[j,:])
+                mu,P=GetMeanCov(Y,w=w)
+                self.means[i]=mu
+                self.covs[i]=P
+
+        else:
+
+            GMM1=GaussMixModel(self.weights,self.means,self.covs)
+            for i in range(GMM1.N):
+                X,w=UnscentedTransform_pts(GMM1.means[i],GMM1.covs[i])
+                Y=np.zeros(X.shape)
+                for j in range(X.shape[0]):
+                    Y[j,:]=Func(X[j,:])
+                mu,P=GetMeanCov(Y,w=w)
+                GMM1.means[i]=mu
+                GMM1.covs[i]=P
+            return GMM1
+
     def purgecomponent(self,i):
 #         print "purging i = ",i," with mean ",self.means[i]," and cov ",self.covs[i]
         self.weights=np.delete(self.weights,i)
@@ -428,7 +499,7 @@ class GaussMixModel(object):
         # is stored in constraint.dual_value.
 #         print constraints[0].dual_value
 
-    def plotcomp_ellipsoids(self,k,dims=[0,1],comp=None,ax=None):
+    def plotcomp_ellipsoids(self,k,dims=[0,1],comp=None,ax=None,c='r'):
         if comp is None:
             rang=range(self.N)
         else:
@@ -442,26 +513,16 @@ class GaussMixModel(object):
             for j in range(100):
                 X[j,:]=( np.dot(sqrtmSIG,np.array([[np.cos(th[j])],[np.sin(th[j])]]))+MU ).transpose()[0]
             if ax is None:
-                plt.plot(X[:,0],X[:,1],'r')
+                plt.plot(X[:,0],X[:,1],c)
             else:
-                ax.plot(X[:,0],X[:,1],'r')
+                ax.plot(X[:,0],X[:,1],c)
                 
 
 def MakeGMMcopy(GMM):
     return GaussMixModel(GMM.weights,GMM.means,GMM.covs)
 
 
-def transformGMM(GMM0,Func):
-    GMM1=GaussMixModel(GMM0.weights,GMM0.means,GMM0.covs)
-    for i in range(GMM0.N):
-        X,w=UnscentedTransform_pts(GMM0.means[i],GMM0.covs[i])
-        Y=np.zeros(X.shape)
-        for j in range(X.shape[0]):
-            Y[j,:]=Func(X[j,:])
-        mu,P=GetMeanCov(Y,w=w)
-        GMM1.means[i]=mu
-        GMM1.covs[i]=P
-    return GMM1
+
 
 def getleafpaths(estimator):
     n_nodes = estimator.tree_.node_count
@@ -687,15 +748,18 @@ def getclusterIDs(X,means,ClusterIds=None):
     .... cluster X into those ids
     """
     if ClusterIds is None:
-        ClusterIds=range(means.shape[0])
+        ClusterIds=np.arange(means.shape[0])
 
     Xids=np.zeros(X.shape[0])
-    for i in range(X.shape[0]):
-        d=[]
-        for j in range(means.shape[0]):
-            d.append( (j,np.linalg.norm(X[i,:]-means[j,:])))    
+    Y=None
+    for j in range(means.shape[0]):
+        pp=np.linalg.norm( X-np.tile(means[j,:],(X.shape[0],1)),axis=1 ).reshape(-1,1)
+        if Y is None:
+            Y=pp
+        else:
+            Y=np.hstack((Y,pp))
 
-        D=sorted(d,key=lambda x: x[1])
-        Xids[i]=ClusterIds[ D[0][0] ]
+    dd=np.argmin(Y,axis=1)    
 
+    Xids=ClusterIds[dd]
     return Xids

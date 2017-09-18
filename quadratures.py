@@ -54,6 +54,6 @@ def Generate_conjaxis(n):
 
 def Generate_principalaxis(n):
     A=np.identity(n)
-
+    A=np.vstack((A,-A))
     return A
 

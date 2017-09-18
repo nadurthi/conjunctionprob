@@ -2,12 +2,11 @@ import numpy as np
 import scipy as sc
 import Estimation as estmn
 import quadratures as qdtr
+import time
 
-def getrawmoms(N,mu,sig):
-	X=[]
-	for i in range(N):
-		C=sc.special.hermitenorm(i,True)
-		
+qdtr=reload(qdtr)
+estmn=reload(estmn)
+
 
 class GMM0I(object):
 	"""
@@ -17,7 +16,7 @@ class GMM0I(object):
 	def __init__(self,dim=2):
 		self.dim=dim
 
-		pass
+
 
 	def Getgmms(self,means):
 		# first get the positive quadrant points
@@ -65,24 +64,32 @@ class GMM0I(object):
 		Ncomp=means.shape[0]
 		while True:
 			X0=estmn.mvnrnd0I(self.dim,N=N)
+			starttime=time.time()
 			Xids=estmn.getclusterIDs(X0,means,ClusterIds=None)
 			ClusterM=[]
 			ClusterP=[]
+			flg=0
 			for i in range(Ncomp):
 				XX=X0[Xids==i,:]
 				if XX.shape[0]<100:
 					N=N*2
+					flg=1
 					break
 
-				m,p=estmn.GetMeanCov(XX)
+				W=estmn.mvnpdf(XX,np.zeros(self.dim),np.identity(self.dim))
+				W=W/np.sum(W)
+				m,p=estmn.GetMeanCov(XX,w=None)
 				ClusterM.append(m)
 				ClusterP.append(p)
+
+			if flg==0:
+				break
 
 		# now optimize the weights
 		b=estmn.mvnpdf(X0,np.zeros(self.dim),np.identity(self.dim))
 		A=None
 		for i in range(Ncomp):
-			pp=estmn.mvnpdf(X0,ClusterM[i][0],ClusterP[i][1]).reshape(-1,1)
+			pp=estmn.mvnpdf(X0,ClusterM[i],ClusterP[i]).reshape(-1,1)
 			if i==0:
 				A=pp
 			else:
