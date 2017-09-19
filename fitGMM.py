@@ -57,11 +57,19 @@ class GMM0I(object):
 		return self.Getgmms_bysamples(1000,None,Xnewmeans)
 
 
-	def Getgmms_bysamples(self,N,oldmeans,newmeans):
+	def Getgmms_bysamples(self,N,oldmeans,newmeans,thres=0.01):
 		if oldmeans is None:
 			means=newmeans
 		else:
 			means=np.vstack((oldmeans,newmeans))
+
+		d=[]
+		for i in range(means.shape[0]):
+			for j in range(i+1,means.shape[0]):
+				d.append((i,j,np.linalg.norm( means[j]-means[i] ),np.linalg.norm(means[i]),np.linalg.norm(means[j]) ))
+		d=filter(lambda x: x[2]<=thres,d)
+		delmeans=set([x[0] if x[3]>x[4] else x[1]  for x in d])
+		means=np.array([means[i] for i in range(means.shape[0]) if i not in delmeans])
 
 		Ncomp=means.shape[0]
 		while True:
@@ -72,7 +80,7 @@ class GMM0I(object):
 			flg=0
 			for i in range(Ncomp):
 				XX=X0[Xids==i,:]
-				if XX.shape[0]<50:
+				if XX.shape[0]<10:
 					N=N*2
 					flg=1
 					break

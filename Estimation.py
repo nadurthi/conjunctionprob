@@ -683,11 +683,11 @@ def getpartitionMeanCovs(X,Xpartids,probs=None):
             
         mm,cc=GetMeanCov(XX,w=w)
         A=[]
-        meanprob=np.max(probs[Xpartids==lfn])
+        meanprob=np.max(probs)
         if meanprob==0:
             continue
             
-        for c in np.hstack((np.linspace(1e-5,1,100))):
+        for c in np.hstack((np.linspace(1e-5,2,100))):
 #             pp=multivariate_normal.pdf(mm, mm, c*cc)
             pp=1/np.sqrt(np.linalg.det(2*np.pi*c*cc))
             A.append( (c,np.linalg.norm(pp-meanprob),pp,cc,1/np.sqrt(np.linalg.det(2*np.pi*cc))) )
@@ -708,9 +708,13 @@ def getpartitionMeanCovs(X,Xpartids,probs=None):
         pp=S[0][2]
         cc=S[0][3]
         
+        
         print "meanprob = ",meanprob," c = ",c,pp ," max eig cc = ",max(np.linalg.eig(cc)[0]) ," cc0 = ",S[0][4]
         
-        
+        if c>20:
+            continue
+
+
         cc=c*cc
    
 
